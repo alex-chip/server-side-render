@@ -1,4 +1,3 @@
-/* eslint-disable import/no-extraneous-dependencies */
 /* eslint-disable global-require */
 import express from 'express';
 import webpack from 'webpack';
@@ -31,7 +30,7 @@ if (env === 'development') {
   app.use(webpackHotMiddleware(compiler));
 }
 
-const setResponse = (html) => {
+const setResponse = (html, preloadedState) => {
   return (`
     <!DOCTYPE html>
     <html>
@@ -41,6 +40,9 @@ const setResponse = (html) => {
       </head>
       <body>
         <div id="app">${html}</div>
+        <script>
+          window.__PRELOADED_STATE__ = ${JSON.stringify(preloadedState).replace(/</g, '\\u003c')}
+        </script>
         <script src='assets/app.js' type='text/javascript'></script>
       </body>
     </html>
@@ -49,6 +51,7 @@ const setResponse = (html) => {
 
 const renderApp = (req, res) => {
   const store = createStore(reducer, initialState);
+  const preloadState = store.getState();
   const html = renderToString(
     <Provider store={store}>
       <StaticRouter location={req.url} context={{}}>
@@ -57,7 +60,7 @@ const renderApp = (req, res) => {
     </Provider>,
   );
 
-  res.send(setResponse(html));
+  res.send(setResponse(html, preloadState));
 };
 
 app.get('*', renderApp);
