@@ -2,6 +2,9 @@
 import express from 'express';
 import webpack from 'webpack';
 import React from 'react';
+import helmet from 'helmet';
+import path from 'path';
+
 import { renderToString } from 'react-dom/server';
 import { Provider } from 'react-redux';
 import { createStore } from 'redux';
@@ -11,10 +14,12 @@ import { StaticRouter } from 'react-router-dom';
 import serverRoutes from '../frontend/routes/serverRoutes';
 import reducer from '../frontend/reducers';
 import initialState from '../frontend/initialState';
+import getManifest from './getManifest';
 
 import config from './config/index';
 
 const { env, port } = config;
+const dirPublic = path.resolve(__dirname, 'public');
 const app = express();
 
 if (env === 'development') {
@@ -28,22 +33,33 @@ if (env === 'development') {
 
   app.use(webpackDevMiddleware(compiler, serverConfig));
   app.use(webpackHotMiddleware(compiler));
+} else {
+  app.use((req, res, next) => {
+    if (!req.hashManifest) req.hashManifest = getManifest();
+    next();
+  });
+  app.use(express.static(dirPublic));
+  app.use(helmet());
+  app.use(helmet.permittedCrossDomainPolicies());
+  app.disable('x-powered-by');
 }
 
-const setResponse = (html, preloadedState) => {
+const setResponse = (html, preloadedState, manifest) => {
+  const mainStyles = manifest ? manifest['main.css'] : 'assets/app.css';
+  const mainBuild = manifest ? manifest['main.js'] : 'assets/app.js';
   return (`
     <!DOCTYPE html>
     <html>
       <head>
         <title>Platzi Video</title>
-        <link rel='stylesheet' href='assets/app.css' type='text/css' />
+        <link rel='stylesheet' href="${mainStyles}" type='text/css' />
       </head>
       <body>
         <div id="app">${html}</div>
         <script>
           window.__PRELOADED_STATE__ = ${JSON.stringify(preloadedState).replace(/</g, '\\u003c')}
         </script>
-        <script src='assets/app.js' type='text/javascript'></script>
+        <script src="${mainBuild}" type='text/javascript'></script>
       </body>
     </html>
   `);
@@ -60,7 +76,7 @@ const renderApp = (req, res) => {
     </Provider>,
   );
 
-  res.send(setResponse(html, preloadState));
+  res.send(setResponse(html, preloadState, req.hashManifest));
 };
 
 app.get('*', renderApp);
